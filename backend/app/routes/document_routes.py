@@ -4,7 +4,7 @@ import uuid
 from flask import Blueprint, request, jsonify, current_app
 from werkzeug.utils import secure_filename
 
-from app.services.ingestion import ingest_document
+from backend.app.services.ingestion import ingest_document
 
 
 document_bp = Blueprint(
