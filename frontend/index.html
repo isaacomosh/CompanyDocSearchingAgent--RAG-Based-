@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CompanyDocs AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css"></head><body>
+<div class="app">
+<aside class="sidebar">
+ <div class="brand"><div class="logo">C</div><div><b>CompanyDocs</b><small>INTELLIGENCE</small></div></div>
+ <button class="new-chat" id="newChatBtn">＋ &nbsp;New conversation</button>
+ <div class="side-title">YOUR DOCUMENTS <button id="refreshDocsBtn">↻</button></div>
+ <div id="documentList" class="document-list"><p class="muted">Loading documents...</p></div>
+ <div class="side-status"><i></i><div><b>Knowledge base</b><small id="documentCount">0 documents indexed</small></div></div>
+</aside>
+<main>
+<header><span class="mobile-brand"><b class="logo">C</b> CompanyDocs</span><span class="top-label">● &nbsp;AI DOCUMENT ASSISTANT</span><span class="private">◇ &nbsp;Private workspace</span></header>
+<section class="workspace">
+<div id="welcomePanel" class="welcome">
+ <div class="eyebrow">✦ &nbsp;YOUR COMPANY KNOWLEDGE, CONNECTED</div>
+ <h1>Find answers in your<br><em>company documents.</em></h1>
+ <p>Ask questions across your indexed PDFs. Get clear answers grounded in your documents, with page references you can verify.</p>
+ <div class="upload-card" id="dropZone"><div class="upload-icon">↑</div><div class="upload-copy"><b>Upload company documents</b><small>Drag and drop a PDF here, or <label for="fileInput">browse files</label></small></div><button id="chooseFileBtn">Choose PDF</button><input id="fileInput" type="file" accept=".pdf,application/pdf" hidden><div id="uploadProgress"><div class="progress"><div id="progressBar"></div></div><small id="uploadStatus">Uploading...</small></div></div>
+ <div class="suggestions"><div class="suggestion-label">TRY ASKING</div>
+ <button class="suggestion" data-question="What are the key company policies?">What are the key company policies? <span>↗</span></button>
+ <button class="suggestion" data-question="Summarise the main points in the uploaded documents.">Summarise the uploaded documents <span>↗</span></button>
+ <button class="suggestion" data-question="What leave benefits are available to employees?">What leave benefits are available? <span>↗</span></button></div>
+</div>
+<div id="chatArea" class="chat-area hidden"><div class="chat-heading"><div><div class="eyebrow">DOCUMENT CONVERSATION</div><h2>Ask your knowledge base</h2></div><span id="scopeLabel" class="scope">All documents</span></div><div id="messages" class="messages"><div class="assistant-message"><div class="avatar">C</div><div><b>CompanyDocs AI</b><p>Ask a question across your indexed company documents.</p></div></div></div></div>
+<div class="composer-wrap"><form id="chatForm" class="composer"><textarea id="questionInput" rows="1" placeholder="Ask a question about your company documents..." required></textarea><div class="composer-bottom"><small>✦ Answers are generated from your indexed documents</small><button id="sendBtn">Ask ↑</button></div></form><div class="disclaimer">AI can make mistakes. Verify important information against the original source documents.</div></div>
+</section></main></div><div id="toast" class="toast"></div><script src="js/app.js"></script></body></html>

@@ -1,6 +1,6 @@
-from sentence_transformers import SentenceTranformer
+from sentence_transformers import SentenceTransformer
 
-model=SentenceTranformer(
+model=SentenceTransformer(
     "sentence-transformers/all-MiniLM-L6-v2"
 )
 
