@@ -42,12 +42,12 @@ Content:
 
     # Construct Gemini prompt
     prompt = f"""
-You are CompanyDocSearchingAgent, an intelligent company document assistant.
+    You are CompanyDocSearchingAgent, an intelligent company document assistant.
 
-Answer the user's question using ONLY the information provided
-in the retrieved company document context.
+    Answer the user's question using ONLY the information provided
+    in the retrieved company document context.
 
-INSTRUCTIONS:
+    INSTRUCTIONS:
 
 1. Do not invent information.
 2. If the answer is unavailable, clearly say so.

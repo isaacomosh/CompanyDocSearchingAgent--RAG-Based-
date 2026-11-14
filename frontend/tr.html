@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pinch & Trash</title>
+<style>
+  :root { color-scheme: dark; --accent:#7dd3fc; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; touch-action: none; user-select: none;
+    background: radial-gradient(1200px 800px at 25% 15%, #1c2234, #0b0d12 70%);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #e6e8ee;
+  }
+
+  #fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 60; }
+
+  /* camera preview */
+  #cam {
+    position: fixed; left: 16px; bottom: 16px; width: 200px; height: 150px; object-fit: cover;
+    transform: scaleX(-1); border-radius: 14px; opacity: 0; transition: opacity .4s;
+    border: 1px solid rgba(255,255,255,.15); z-index: 5; background: #000;
+  }
+  #cam.on { opacity: .8; }
+
+  /* HUD */
+  #hud { position: fixed; top: 16px; left: 18px; z-index: 70; font-size: 13px; color: #9aa3b5; line-height: 1.5; }
+  #hud b { color: #e6e8ee; font-weight: 600; font-size: 15px; }
+  #count { color: var(--accent); }
+
+  /* start panel */
+  #start {
+    position: fixed; inset: 0; z-index: 80; display: grid; place-items: center;
+    background: rgba(8,10,15,.72); backdrop-filter: blur(6px); transition: opacity .4s;
+  }
+  #start.hide { opacity: 0; pointer-events: none; }
+  #panel { max-width: 420px; padding: 28px; text-align: center; }
+  #panel h1 { margin: 0 0 10px; font-size: 26px; letter-spacing: -.01em; }
+  #panel p { margin: 0 0 20px; color: #a6aec0; line-height: 1.55; font-size: 15px; }
+  button#go {
+    font: inherit; font-weight: 600; padding: 12px 26px; border-radius: 999px; border: 0; cursor: pointer;
+    background: #fff; color: #10131a; transition: transform .15s;
+  }
+  button#go:hover { transform: scale(1.04); }
+  button#go:disabled { opacity: .6; cursor: default; transform: none; }
+  #msg { margin-top: 14px; font-size: 13px; color: #f0a8a8; min-height: 18px; }
+  #skip { margin-top: 8px; font-size: 13px; color: #8089a0; cursor: pointer; text-decoration: underline; background: none; border: 0; }
+
+  /* the white div */
+  #card {
+    position: fixed; left: 0; top: 0; width: 260px; height: 170px; z-index: 20;
+    background: #fff; border-radius: 6px; cursor: grab; will-change: transform;
+    box-shadow: 0 8px 24px rgba(0,0,0,.45), 0 0 0 0 rgba(125,211,252,0);
+    transition: box-shadow .2s; display: grid; place-items: center;
+    color: #a3a8b3; font-size: 13px; letter-spacing: .02em;
+  }
+  #card.near { box-shadow: 0 8px 24px rgba(0,0,0,.45), 0 0 0 4px rgba(125,211,252,.55); }
+  #card.held { cursor: grabbing; box-shadow: 0 26px 50px rgba(0,0,0,.55), 0 0 0 4px rgba(125,211,252,.9); }
+
+  /* paper folding rig */
+  .fold-host { position: fixed; perspective: 1000px; z-index: 25; pointer-events: none; }
+  .sheet { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: #fff; border-radius: 4px; }
+  .flap { position: absolute; background: #fff; border-radius: 3px; backface-visibility: visible; }
+
+  /* trash can */
+  #trash {
+    position: fixed; right: 5vw; bottom: 6vh; width: 130px; height: 160px; z-index: 30;
+    transition: filter .25s; filter: drop-shadow(0 10px 18px rgba(0,0,0,.5));
+  }
+  #trash svg { width: 100%; height: 100%; overflow: visible; display: block; }
+  #trash .body { fill: #272c38; stroke: #6b7385; stroke-width: 3; transition: stroke .2s; }
+  #trash .rib { stroke: #3d4454; stroke-width: 3; stroke-linecap: round; }
+  #trash .lidpart { fill: #343b4b; stroke: #6b7385; stroke-width: 3; transition: stroke .2s; }
+  #lid { transform-origin: 16px 32px; transition: transform .3s cubic-bezier(.3,1.5,.5,1); }
+  #trash.open #lid { transform: rotate(-44deg) translate(-4px,-2px); }
+  #trash.open .body, #trash.open .lidpart { stroke: var(--accent); }
+  #trash.open { filter: drop-shadow(0 0 22px rgba(125,211,252,.45)); }
+</style>
+</head>
+<body>
+
+<video id="cam" playsinline muted></video>
+<canvas id="fx"></canvas>
+
+<div id="hud">
+  <b>Pinch &amp; Trash</b><br>
+  <span id="status">Camera off</span><br>
+  Disposed: <span id="count">0</span>
+</div>
+
+<div id="card">pinch to drag</div>
+
+<div id="trash">
+  <svg viewBox="0 0 120 150" aria-label="Trash can">
+    <path class="body" d="M18 38 H102 L95 138 Q94 146 86 146 H34 Q26 146 25 138 Z"/>
+    <line class="rib" x1="45" y1="56" x2="46" y2="128"/>
+    <line class="rib" x1="60" y1="56" x2="60" y2="128"/>
+    <line class="rib" x1="75" y1="56" x2="74" y2="128"/>
+    <g id="lid">
+      <rect class="lidpart" x="44" y="12" width="32" height="11" rx="5"/>
+      <rect class="lidpart" x="8" y="22" width="104" height="13" rx="6"/>
+    </g>
+  </svg>
+</div>
+
+<div id="start">
+  <div id="panel">
+    <h1>Pinch to throw it away</h1>
+    <p>Enable your camera, then pinch your thumb and index finger together over the white card to pick it up. Move your hand over the bin and let go &mdash; it folds itself up and drops in. Mouse works too.</p>
+    <button id="go">Enable camera</button>
+    <div id="msg"></div>
+    <button id="skip">Continue with mouse only</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const card = $('#card'), trash = $('#trash'), video = $('#cam');
+  const canvas = $('#fx'), ctx = canvas.getContext('2d');
+  const statusEl = $('#status'), countEl = $('#count');
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  let W = innerWidth, H = innerHeight;
+  function resize() {
+    W = innerWidth; H = innerHeight;
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  addEventListener('resize', resize); resize();
+
+  /* ---------------- card state ---------------- */
+  const CW = 260, CH = 170;
+  const state = { x: 0, y: 0, rot: 0, scale: 1, grab: null, busy: false, count: 0 };
+
+  function place() {
+    card.style.transform =
+      `translate3d(${state.x}px,${state.y}px,0) rotate(${state.rot}deg) scale(${state.scale})`;
+  }
+  function spawn(animate) {
+    state.x = clamp(W * 0.22 - CW / 2, 10, W - CW - 10);
+    state.y = H * 0.48 - CH / 2;
+    state.rot = 0; state.scale = 1;
+    place();
+    if (animate) card.animate(
+      [{ scale: '.5', opacity: 0 }, { scale: '1', opacity: 1 }],
+      { duration: 450, easing: 'cubic-bezier(.2,1.5,.4,1)' });
+  }
+  spawn(false);
+
+  function inCard(px, py, pad = 0) {
+    return px >= state.x - pad && px <= state.x + CW + pad &&
+           py >= state.y - pad && py <= state.y + CH + pad;
+  }
+  function overTrash() {
+    const r = trash.getBoundingClientRect(), pad = 40;
+    const cx = state.x + CW / 2, cy = state.y + CH / 2;
+    return cx > r.left - pad && cx < r.right + pad && cy > r.top - pad && cy < r.bottom + pad;
+  }
+
+  /* ---------------- grabbing ---------------- */
+  function startGrab(id, px, py) {
+    if (state.busy || state.grab || !inCard(px, py, 30)) return false;
+    state.grab = { id, ox: px - state.x, oy: py - state.y, lost: 0 };
+    state.scale = 1.05;
+    card.classList.add('held'); card.classList.remove('near');
+    place();
+    return true;
+  }
+  function moveGrab(px, py) {
+    const g = state.grab; if (!g) return;
+    const nx = px - g.ox, ny = py - g.oy;
+    const vx = nx - state.x;
+    state.x = nx; state.y = ny;
+    state.rot += (clamp(vx * 0.6, -14, 14) - state.rot) * 0.2;
+    place();
+    trash.classList.toggle('open', overTrash());
+  }
+  function endGrab() {
+    if (!state.grab) return;
+    state.grab = null;
+    card.classList.remove('held');
+    state.scale = 1;
+    if (overTrash()) { dispose(); return; }
+    trash.classList.remove('open');
+    card.animate([{ rotate: state.rot + 'deg' }, { rotate: '0deg' }], { duration: 200 });
+    state.rot = 0;
+    state.x = clamp(state.x, -CW * 0.5, W - CW * 0.5);
+    state.y = clamp(state.y, -CH * 0.5, H - CH * 0.5);
+    place();
+  }
+
+  /* mouse / touch fallback */
+  card.addEventListener('pointerdown', e => {
+    if (startGrab('mouse', e.clientX, e.clientY)) card.setPointerCapture(e.pointerId);
+  });
+  addEventListener('pointermove', e => {
+    if (state.grab && state.grab.id === 'mouse') moveGrab(e.clientX, e.clientY);
+  });
+  addEventListener('pointerup', () => {
+    if (state.grab && state.grab.id === 'mouse') endGrab();
+  });
+
+  /* ---------------- paper folding disposal ---------------- */
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  async function dispose() {
+    state.busy = true;
+    trash.classList.add('open');
+
+    let hw = CW, hh = CH, hx = state.x, hy = state.y;
+    const host = document.createElement('div');
+    host.className = 'fold-host';
+    const setHost = () => Object.assign(host.style, {
+      left: hx + 'px', top: hy + 'px', width: hw + 'px', height: hh + 'px'
+    });
+    setHost();
+    const sheet = document.createElement('div');
+    sheet.className = 'sheet';
+    host.append(sheet);
+    document.body.append(host);
+    card.style.visibility = 'hidden';
+
+    const dirs = ['x', 'y', 'x', 'y'];
+    const ease = 'cubic-bezier(.45,.05,.3,1)';
+    const dur = 480;
+
+    for (let i = 0; i < dirs.length; i++) {
+      const d = dirs[i];
+      const flap = document.createElement('div');
+      flap.className = 'flap';
+      let from, to, shift;
+
+      if (d === 'x') {                      // fold right half over left half
+        sheet.style.width = hw / 2 + 'px';
+        Object.assign(flap.style, {
+          left: hw / 2 + 'px', top: '0', width: hw / 2 + 'px', height: hh + 'px',
+          transformOrigin: '0 50%'
+        });
+        from = 'rotateY(0deg)'; to = 'rotateY(-180deg)';
+        shift = { x: hw / 4, y: 0 };
+      } else {                              // fold bottom half over top half
+        sheet.style.height = hh / 2 + 'px';
+        Object.assign(flap.style, {
+          left: '0', top: hh / 2 + 'px', width: hw + 'px', height: hh / 2 + 'px',
+          transformOrigin: '50% 0'
+        });
+        from = 'rotateX(0deg)'; to = 'rotateX(180deg)';
+        shift = { x: 0, y: hh / 4 };
+      }
+      host.append(flap);
+
+      const a1 = flap.animate(
+        [{ transform: from, filter: 'brightness(1)' }, { transform: to, filter: 'brightness(.84)' }],
+        { duration: dur, easing: ease, fill: 'forwards' });
+      const a2 = host.animate(
+        [{ transform: 'translate(0,0)' }, { transform: `translate(${shift.x}px,${shift.y}px)` }],
+        { duration: dur, easing: ease, fill: 'forwards' });
+      await a1.finished;
+
+      // commit the fold: shrink the host, remove the flap
+      if (d === 'x') { hw /= 2; hx += shift.x; } else { hh /= 2; hy += shift.y; }
+      setHost();
+      sheet.style.width = '100%'; sheet.style.height = '100%';
+      const n = i + 1, layers = [];
+      for (let k = 1; k <= n; k++) layers.push(`${k * 1.4}px ${k * 1.4}px 0 ${k % 2 ? '#e8e9ee' : '#d6d9e1'}`);
+      layers.push('0 8px 20px rgba(0,0,0,.45)');
+      sheet.style.boxShadow = layers.join(',');
+      flap.remove();
+      a2.cancel();
+      await sleep(70);
+    }
+
+    // crumple squish
+    sheet.style.borderRadius = '10px';
+    await host.animate([
+      { transform: 'scale(1) rotate(0deg)' },
+      { transform: 'scale(.92,1.1) rotate(-6deg)', offset: .5 },
+      { transform: 'scale(.85) rotate(8deg)' }
+    ], { duration: 220, easing: 'ease-out', fill: 'forwards' }).finished;
+    host.getAnimations().forEach(a => a.cancel());
+    host.style.transform = 'scale(.85) rotate(8deg)';
+
+    // arc into the bin
+    const tr = trash.getBoundingClientRect();
+    const tx = tr.left + tr.width * 0.5, ty = tr.top + tr.height * 0.1;
+    const dx = tx - (hx + hw / 2), dy = ty - (hy + hh / 2);
+    await host.animate([
+      { transform: 'translate(0,0) rotate(8deg) scale(.85)' },
+      { transform: `translate(${dx * .45}px,${dy * .45 - 130}px) rotate(130deg) scale(.8)`, offset: .45 },
+      { transform: `translate(${dx}px,${dy - 36}px) rotate(220deg) scale(.65)`, offset: .8 },
+      { transform: `translate(${dx}px,${dy + 70}px) rotate(260deg) scale(.4)` }
+    ], { duration: 850, easing: 'cubic-bezier(.4,0,.3,1)', fill: 'forwards' }).finished;
+    host.remove();
+
+    // lid closes, can wobbles
+    trash.classList.remove('open');
+    trash.animate([
+      { transform: 'scale(1,1)' }, { transform: 'scale(1.07,.93)', offset: .3 },
+      { transform: 'scale(.97,1.04)', offset: .6 }, { transform: 'scale(1,1)' }
+    ], { duration: 420, easing: 'ease-out' });
+    state.count++; countEl.textContent = state.count;
+
+    await sleep(800);
+    card.style.visibility = 'visible';
+    spawn(true);
+    state.busy = false;
+  }
+
+  /* ---------------- hand tracking ---------------- */
+  const CONN = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+                [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+  const TIPS = [4, 8, 12, 16, 20];
+  const GAIN = 1.3;                 // amplify hand motion so screen corners are reachable
+  const mapX = nx => clamp((0.5 + ((1 - nx) - 0.5) * GAIN) * W, 0, W);   // mirrored
+  const mapY = ny => clamp((0.5 + (ny - 0.5) * GAIN) * H, 0, H);
+
+  let landmarker = null, lastT = -1, lastRes = null;
+  const hs = [];                    // per-hand smoothed cursor + pinch state
+
+  function frame() {
+    requestAnimationFrame(frame);
+    ctx.clearRect(0, 0, W, H);
+    if (!landmarker || video.readyState < 2) return;
+
+    if (video.currentTime !== lastT) {
+      lastT = video.currentTime;
+      try { lastRes = landmarker.detectForVideo(video, performance.now()); } catch (e) {}
+    }
+    const hands = (lastRes && lastRes.landmarks) || [];
+    hs.length = hands.length;
+    let anyNear = false;
+
+    hands.forEach((lm, i) => {
+      const pts = lm.map(p => ({ x: mapX(p.x), y: mapY(p.y) }));
+      const ar = video.videoWidth / video.videoHeight;
+      const dist = (a, b) => Math.hypot((lm[a].x - lm[b].x) * ar, lm[a].y - lm[b].y);
+      const ratio = dist(4, 8) / (dist(0, 9) || 1e-3);
+
+      const h = hs[i] || (hs[i] = { pinch: false, x: 0, y: 0, init: false });
+      const tx = (pts[4].x + pts[8].x) / 2, ty = (pts[4].y + pts[8].y) / 2;
+      if (!h.init) { h.x = tx; h.y = ty; h.init = true; }
+      else { h.x += (tx - h.x) * 0.5; h.y += (ty - h.y) * 0.5; }
+
+      const was = h.pinch;
+      h.pinch = was ? ratio < 0.45 : ratio < 0.30;       // hysteresis
+
+      if (h.pinch && !was) startGrab(i, h.x, h.y);
+      if (state.grab && state.grab.id === i) {
+        state.grab.lost = 0;
+        if (h.pinch) moveGrab(h.x, h.y); else endGrab();
+      }
+      if (!h.pinch && !state.busy && !state.grab && inCard(h.x, h.y, 30)) anyNear = true;
+
+      drawHand(pts, h);
+    });
+
+    // lost the hand that was holding the card
+    if (state.grab && typeof state.grab.id === 'number' && !hs[state.grab.id]) {
+      if (++state.grab.lost > 10) endGrab();
+    }
+    card.classList.toggle('near', anyNear && !state.grab);
+  }
+
+  function drawHand(pts, h) {
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (const [a, b] of CONN) { ctx.moveTo(pts[a].x, pts[a].y); ctx.lineTo(pts[b].x, pts[b].y); }
+    ctx.stroke();
+
+    pts.forEach((p, i) => {
+      ctx.beginPath();
+      ctx.fillStyle = TIPS.includes(i) ? '#7dd3fc' : 'rgba(255,255,255,.85)';
+      ctx.arc(p.x, p.y, TIPS.includes(i) ? 5 : 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // pinch line + cursor
+    ctx.strokeStyle = h.pinch ? '#7dd3fc' : 'rgba(125,211,252,.5)';
+    ctx.lineWidth = h.pinch ? 4 : 2;
+    ctx.beginPath(); ctx.moveTo(pts[4].x, pts[4].y); ctx.lineTo(pts[8].x, pts[8].y); ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(h.x, h.y, h.pinch ? 12 : 16, 0, Math.PI * 2);
+    if (h.pinch) { ctx.fillStyle = 'rgba(125,211,252,.35)'; ctx.fill(); }
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+  }
+  requestAnimationFrame(frame);
+
+  /* ---------------- start ---------------- */
+  const startEl = $('#start'), goBtn = $('#go'), msg = $('#msg');
+  $('#skip').onclick = () => { startEl.classList.add('hide'); statusEl.textContent = 'Mouse mode'; };
+
+  goBtn.onclick = async () => {
+    goBtn.disabled = true; msg.textContent = '';
+    try {
+      goBtn.textContent = 'Starting camera…';
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }, audio: false
+      });
+      video.srcObject = stream;
+      await video.play();
+      video.classList.add('on');
+
+      goBtn.textContent = 'Loading hand model…';
+      statusEl.textContent = 'Loading model…';
+      const base = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+      const { HandLandmarker, FilesetResolver } = await import(base + '/vision_bundle.mjs');
+      const fileset = await FilesetResolver.forVisionTasks(base + '/wasm');
+      const opts = delegate => ({
+        baseOptions: {
+          modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+          delegate
+        },
+        runningMode: 'VIDEO', numHands: 2,
+        minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5
+      });
+      try { landmarker = await HandLandmarker.createFromOptions(fileset, opts('GPU')); }
+      catch (e) { landmarker = await HandLandmarker.createFromOptions(fileset, opts('CPU')); }
+
+      statusEl.textContent = 'Tracking — pinch the card';
+      startEl.classList.add('hide');
+    } catch (err) {
+      console.error(err);
+      goBtn.disabled = false; goBtn.textContent = 'Try again';
+      msg.textContent = err && err.name === 'NotAllowedError'
+        ? 'Camera permission was denied. Allow it in your browser and try again.'
+        : 'Could not start: ' + (err && err.message ? err.message : err);
+      statusEl.textContent = 'Camera off';
+    }
+  };
+})();
+</script>
+</body>
+</html>
